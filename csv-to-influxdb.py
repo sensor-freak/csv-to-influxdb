@@ -3,6 +3,8 @@ import gzip
 import argparse
 import csv
 import datetime
+import re
+import copy
 from pytz import timezone
 
 from influxdb import InfluxDBClient
@@ -47,7 +49,7 @@ def isinteger(value):
 
 def loadCsv(inputfilename, servername, user, password, dbname, metric, 
     timecolumn, timeformat, tagcolumns, fieldcolumns, usegzip, 
-    delimiter, batchsize, create, datatimezone, usessl):
+    delimiter, batchsize, create, datatimezone, usessl, useautofields):
 
     host = servername[0:servername.rfind(':')]
     port = int(servername[servername.rfind(':')+1:])
@@ -73,6 +75,20 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
     count = 0
     with inputfile as csvfile:
         reader = csv.DictReader(csvfile, delimiter=delimiter)
+
+        tmpnames = {}
+        for name in reader.fieldnames:
+            match = re.match(r"\((.*?)\)", name)
+            if match:
+                tmpnames['building'] = match.group(1)
+            match = re.search(r"\((.*?)\)$", name)
+            if match:
+                tmpnames['resolution'] = match.group(1)
+
+        if not fieldcolumns:
+            fieldcolumns = [x for x in reader.fieldnames]
+            fieldcolumns.remove(timecolumn)
+
         for row in reader:
             datetime_naive = datetime.datetime.strptime(row[timecolumn],timeformat)
 
@@ -83,7 +99,7 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
 
             timestamp = unix_time_millis(datetime_local) * 1000000 # in nanoseconds
 
-            tags = {}
+            tags = copy.deepcopy(tmpnames)
             for t in tagcolumns:
                 v = 0
                 if t in row:
@@ -175,10 +191,10 @@ if __name__ == "__main__":
     parser.add_argument('-tz', '--timezone', default='UTC',
                         help='Timezone of supplied data. Default: UTC')
 
-    parser.add_argument('--fieldcolumns', nargs='?', default='value',
+    parser.add_argument('--fieldcolumns', nargs='?', default='',
                         help='List of csv columns to use as fields, separated by comma, e.g.: value1,value2. Default: value')
 
-    parser.add_argument('--tagcolumns', nargs='?', default='host',
+    parser.add_argument('--tagcolumns', nargs='?', default='',
                         help='List of csv columns to use as tags, separated by comma, e.g.: host,data_center. Default: host')
 
     parser.add_argument('-g', '--gzip', action='store_true', default=False,
@@ -187,8 +203,12 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--batchsize', type=int, default=5000,
                         help='Batch size. Default: 5000.')
 
+    parser.add_argument('--autofields', action='store_true', default=False,
+                        help='Fill tag and field columns from CSV header.')
+
     args = parser.parse_args()
-    loadCsv(args.input, args.server, args.user, args.password, args.dbname, 
+
+    loadCsv(args.input, args.server, args.user, args.password, args.dbname,
         args.metricname, args.timecolumn, args.timeformat, args.tagcolumns, 
         args.fieldcolumns, args.gzip, args.delimiter, args.batchsize, args.create, 
-        args.timezone, args.ssl)
+        args.timezone, args.ssl, args.autofields)
