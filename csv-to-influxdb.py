@@ -12,6 +12,15 @@ from influxdb import InfluxDBClient
 epoch_naive = datetime.datetime.utcfromtimestamp(0)
 epoch = timezone('UTC').localize(epoch_naive)
 
+# A map of well known column names
+wellknownnames = {
+    r'District(\w+):Facility.*': r'\1',
+    r'.*Zone\s+((\w+\s+)*)Total\s+((\w+\s+)*)Energy.*\[(.*)\].*': r'\1\3',
+    r'.*Zone\s+((\w+\s+)*)\[(.*)\].*': r'\1',
+    r'.*:Site\s+((\w+\s+)*)\[(.*)\].*': r'\1'
+}
+
+
 def unix_time_millis(dt):
     return int((dt - epoch).total_seconds() * 1000)
 
@@ -76,15 +85,32 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
     with inputfile as csvfile:
         reader = csv.DictReader(csvfile, delimiter=delimiter)
 
+        #reader.fieldnames[1] = 'Test'
+        readernames = [value for value in reader.fieldnames]
+
+        # Extract some tags from the headers of the data (KIT specific)
         tmpnames = {}
-        for name in reader.fieldnames:
-            match = re.match(r"\((.*?)\)", name)
+        for idx, name in enumerate(reader.fieldnames):
+            match = re.match(r"\s*\((.*?)\)", name)
             if match:
                 tmpnames['building'] = match.group(1)
-            match = re.search(r"\((.*?)\)$", name)
+                reader.fieldnames[idx] = re.sub(match.re, '', reader.fieldnames[idx])
+            match = re.search(r"\((.*?)\)\s*$", name)
             if match:
                 tmpnames['resolution'] = match.group(1)
+                reader.fieldnames[idx] = re.sub(match.re, '', reader.fieldnames[idx])
 
+            # Map this name to a different (shorter) name
+            for regex, repl in wellknownnames.items():
+                match = re.match(regex, name)
+                if match:
+                    reader.fieldnames[idx] = re.sub(match.re, repl, name)
+
+            # Trim the string
+            reader.fieldnames[idx] = reader.fieldnames[idx].strip(' :')
+
+        # If no fields are specified on command line, use all
+        # columns as fields (except time column)
         if not fieldcolumns:
             fieldcolumns = [x for x in reader.fieldnames]
             fieldcolumns.remove(timecolumn)
