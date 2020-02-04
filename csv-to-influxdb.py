@@ -180,13 +180,13 @@ if __name__ == "__main__":
                         help='Drop database and create a new one.')
 
     parser.add_argument('-m', '--metricname', nargs='?', default='value',
-                        help='Metric column name. Default: value')
+                        help='Measurement name. Default: value')
 
     parser.add_argument('-tc', '--timecolumn', nargs='?', default='timestamp',
                         help='Timestamp column name. Default: timestamp.')
 
     parser.add_argument('-tf', '--timeformat', nargs='?', default='%Y-%m-%d %H:%M:%S',
-                        help='Timestamp format. Default: \'%%Y-%%m-%%d %%H:%%M:%%S\' e.g.: 1970-01-01 00:00:00')
+                        help='Timestamp column format. Default: \'%%Y-%%m-%%d %%H:%%M:%%S\' e.g.: 1970-01-01 00:00:00')
 
     parser.add_argument('-tz', '--timezone', default='UTC',
                         help='Timezone of supplied data. Default: UTC')
@@ -196,6 +196,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--tagcolumns', nargs='?', default='',
                         help='List of csv columns to use as tags, separated by comma, e.g.: host,data_center. Default: host')
+
+    parser.add_argument('--tags', nargs='?', default='',
+                        help='List of csv key=value pairs to use as tags, separated by comma, e.g.: host=foo,station=bar.')
 
     parser.add_argument('-g', '--gzip', action='store_true', default=False,
                         help='Compress before sending to influxdb.')
