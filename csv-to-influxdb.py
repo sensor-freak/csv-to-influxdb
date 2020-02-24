@@ -56,15 +56,15 @@ def isinteger(value):
             return False
 
 
-def loadCsv(inputfilename, servername, user, password, dbname, metric, 
-    timecolumn, timeformat, tagcolumns, fieldcolumns, usegzip, 
-    delimiter, batchsize, create, datatimezone, usessl, useautofields):
+def loadCsv(inputfilename, servername, user, password, dbname, metric,
+            timecolumn, timeformat, tagcolumns, fieldcolumns, usegzip,
+            delimiter, batchsize, create, datatimezone, usessl, useautofields):
 
     host = servername[0:servername.rfind(':')]
     port = int(servername[servername.rfind(':')+1:])
     client = InfluxDBClient(host, port, user, password, dbname, ssl=usessl)
 
-    if(create == True):
+    if create:
         print('Deleting database %s'%dbname)
         client.drop_database(dbname)
         print('Creating database %s'%dbname)
@@ -85,19 +85,19 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
     with inputfile as csvfile:
         reader = csv.DictReader(csvfile, delimiter=delimiter)
 
-        #reader.fieldnames[1] = 'Test'
-        readernames = [value for value in reader.fieldnames]
+        # reader.fieldnames[1] = 'Test'
+        # readernames = [value for value in reader.fieldnames]
 
         # Extract some tags from the headers of the data (KIT specific)
-        tmpnames = {}
+        tagnames = {}
         for idx, name in enumerate(reader.fieldnames):
             match = re.match(r"\s*\((.*?)\)", name)
             if match:
-                tmpnames['building'] = match.group(1)
+                tagnames['building'] = match.group(1)
                 reader.fieldnames[idx] = re.sub(match.re, '', reader.fieldnames[idx])
             match = re.search(r"\((.*?)\)\s*$", name)
             if match:
-                tmpnames['resolution'] = match.group(1)
+                tagnames['resolution'] = match.group(1)
                 reader.fieldnames[idx] = re.sub(match.re, '', reader.fieldnames[idx])
 
             # Map this name to a different (shorter) name
@@ -115,6 +115,7 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
             fieldcolumns = [x for x in reader.fieldnames]
             fieldcolumns.remove(timecolumn)
 
+        # Process the CSV rows
         for row in reader:
             datetime_naive = datetime.datetime.strptime(row[timecolumn],timeformat)
 
@@ -125,7 +126,7 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
 
             timestamp = unix_time_millis(datetime_local) * 1000000 # in nanoseconds
 
-            tags = copy.deepcopy(tmpnames)
+            tags = copy.deepcopy(tagnames)
             for t in tagcolumns:
                 v = 0
                 if t in row:
@@ -136,23 +137,26 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
             for f in fieldcolumns:
                 v = 0
                 if f in row:
-                    if (isfloat(row[f])):
+                    if isfloat(row[f]):
                         v = float(row[f])
-                    elif (isbool(row[f])):
+                    elif isbool(row[f]):
                         v = str2bool(row[f])
                     else:
                         v = row[f]
                 fields[f] = v
 
+            # Add columns for year and month
+            tags['month'] = datetime_local.month
+            tags['year'] = datetime_local.year
 
             point = {"measurement": metric, "time": timestamp, "fields": fields, "tags": tags}
 
             datapoints.append(point)
-            count+=1
+            count += 1
             
             if len(datapoints) % batchsize == 0:
                 print('Read %d lines'%count)
-                print('Inserting %d datapoints...'%(len(datapoints)))
+                print('Inserting %d data points...'%(len(datapoints)))
                 response = client.write_points(datapoints)
 
                 if not response:
@@ -163,21 +167,21 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
 
                 datapoints = []
             
-
     # write rest
     if len(datapoints) > 0:
         print('Read %d lines'%count)
         print('Inserting %d datapoints...'%(len(datapoints)))
         response = client.write_points(datapoints)
 
-        if response == False:
+        if not response:
             print('Problem inserting points, exiting...')
             exit(1)
 
         print("Wrote %d, response: %s" % (len(datapoints), response))
 
     print('Done')
-    
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Csv to influxdb.')
 
@@ -223,8 +227,8 @@ if __name__ == "__main__":
     parser.add_argument('--tagcolumns', nargs='?', default='',
                         help='List of csv columns to use as tags, separated by comma, e.g.: host,data_center. Default: host')
 
-    parser.add_argument('--tags', nargs='?', default='',
-                        help='List of csv key=value pairs to use as tags, separated by comma, e.g.: host=foo,station=bar.')
+    # parser.add_argument('--tags', nargs='?', default='',
+    #                     help='List of csv key=value pairs to use as tags, separated by comma, e.g.: host=foo,station=bar.')
 
     parser.add_argument('-g', '--gzip', action='store_true', default=False,
                         help='Compress before sending to influxdb.')
@@ -233,7 +237,7 @@ if __name__ == "__main__":
                         help='Batch size. Default: 5000.')
 
     parser.add_argument('--autofields', action='store_true', default=False,
-                        help='Fill tag and field columns from CSV header.')
+                        help='Fill tag and field columns from CSV headers.')
 
     args = parser.parse_args()
 
