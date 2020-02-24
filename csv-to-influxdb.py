@@ -58,7 +58,8 @@ def isinteger(value):
 
 def loadCsv(inputfilename, servername, user, password, dbname, metric,
             timecolumn, timeformat, tagcolumns, fieldcolumns, usegzip,
-            delimiter, batchsize, create, datatimezone, usessl, useautofields):
+            delimiter, batchsize, create, datatimezone, usessl,
+            useautofields, statictags):
 
     host = servername[0:servername.rfind(':')]
     port = int(servername[servername.rfind(':')+1:])
@@ -88,8 +89,13 @@ def loadCsv(inputfilename, servername, user, password, dbname, metric,
         # reader.fieldnames[1] = 'Test'
         # readernames = [value for value in reader.fieldnames]
 
-        # Extract some tags from the headers of the data (KIT specific)
+        # Add tags defined in command line
         tagnames = {}
+        tagnames.update({k.strip(): v.strip() for k, v in
+                         [v.split('=') for v in
+                          [i.strip() for i in statictags.split(',')]]})
+
+        # Extract some tags from the headers of the data (KIT specific)
         for idx, name in enumerate(reader.fieldnames):
             match = re.match(r"\s*\((.*?)\)", name)
             if match:
@@ -227,8 +233,8 @@ if __name__ == "__main__":
     parser.add_argument('--tagcolumns', nargs='?', default='',
                         help='List of csv columns to use as tags, separated by comma, e.g.: host,data_center. Default: host')
 
-    # parser.add_argument('--tags', nargs='?', default='',
-    #                     help='List of csv key=value pairs to use as tags, separated by comma, e.g.: host=foo,station=bar.')
+    parser.add_argument('--tags', nargs='?', default='',
+                        help='List of key=value pairs to use as tags, separated by comma, e.g.: host=foo,station=bar.')
 
     parser.add_argument('-g', '--gzip', action='store_true', default=False,
                         help='Compress before sending to influxdb.')
@@ -244,4 +250,4 @@ if __name__ == "__main__":
     loadCsv(args.input, args.server, args.user, args.password, args.dbname,
         args.metricname, args.timecolumn, args.timeformat, args.tagcolumns, 
         args.fieldcolumns, args.gzip, args.delimiter, args.batchsize, args.create, 
-        args.timezone, args.ssl, args.autofields)
+        args.timezone, args.ssl, args.autofields, args.tags)
